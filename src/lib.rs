@@ -1,6 +1,6 @@
 pub mod algorithms;
 
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 const DICTIONARY: &str = include_str!("../dictionary.txt");
 
@@ -70,6 +70,19 @@ impl Correctness {
         }
         c
     }
+
+    pub fn patterns() -> impl Iterator<Item = [Self; 5]> {
+        itertools::iproduct!(
+            [Self::Correct, Self::Wrong, Self::Misplaced],
+            [Self::Correct, Self::Wrong, Self::Misplaced],
+            [Self::Correct, Self::Wrong, Self::Misplaced],
+            [Self::Correct, Self::Wrong, Self::Misplaced],
+            [Self::Correct, Self::Wrong, Self::Misplaced]      
+        )
+        .map(|(a,b,c,d,e)| [a, b, c, d, e]) 
+    
+    }
+
 }
 
 
@@ -89,6 +102,72 @@ pub enum Correctness {
 pub struct Guess {
     word : String,
     mask: [Correctness; 5]
+}
+
+impl Guess {
+    pub fn matches(&self, word: &str) -> bool {
+        assert_eq!(self.word.len(), word.len());
+        let mut used = [false; 5];
+        for (i,((g,&m),w)) in self
+        .word
+        .chars().zip(&self.mask)
+        .zip(word.chars())
+        .enumerate() 
+        {
+            
+            
+            if m == Correctness::Correct {
+                if g != w {
+                    return false
+                } else {
+                    used[i] = true;
+                }
+            }
+        }
+        for (i,((g,&m),w)) in self.word.chars().zip(&self.mask).zip(word.chars()).enumerate() {
+            
+            if m == Correctness::Correct {
+                continue;
+            }
+            
+            let mut plausible = true;
+
+            if self.word.chars().zip(&self.mask).enumerate().any(|(j,(g,m))| {
+                if g != w {
+                    return false;
+                }
+                if used[j]{
+                    return false;
+                }
+                match m {
+                    Correctness::Correct => unreachable!("all "),
+                    Correctness::Misplaced if j==i => {
+                        plausible = false;
+                        return false;
+                    }
+
+                    Correctness::Misplaced => {
+                        used[j] = true;
+                        return true;
+                    }
+                    Correctness::Wrong => {
+
+                        plausible = false;
+                        return false;
+                    }
+                }
+
+            }) && plausible{
+                assert!(plausible)
+            } else if !plausible{
+                return false;
+            }else {
+
+            }
+        }
+
+        true
+    }
 }
 
 pub trait Guesser {
@@ -118,6 +197,28 @@ macro_rules! guesser {
 
 #[cfg(test)]
 mod tests {
+    macro_rules!  mask {
+        (M) => {$crate::Correctness::Misplaced};
+        (C) => {$crate::Correctness::Correct};
+        (W) => {$crate::Correctness::Wrong};
+        ($($c:tt)+) => {[
+            $(mask!($c)),+
+        ]}
+    }
+    
+
+    mod guess_matcher {
+        use crate::Guess;
+
+        #[test]
+        fn matches() {
+            assert!(Guess {
+                word: "baaaa".to_string(),
+                mask: mask![W C M W W]
+            }.matches("aaccc"))
+
+        }
+    }
 
     mod game {
         use crate::{Guess, Guesser, Wordle};
